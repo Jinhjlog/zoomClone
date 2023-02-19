@@ -1,104 +1,56 @@
-// io는 자동적으로 back end socket.io와 연결해주는 함수
 const socket = io();
 
-const welcome = document.getElementById("welcome");
-const nameBox = document.getElementById("namebox");
+const myFace = document.getElementById("myFace");
+// stream을 받아야함 stream은 비디오와 오디오가 결합된 것
 
-const joinRoom = welcome.querySelector("#joinRoom");
-const nameForm = nameBox.querySelector("#name")
+const muteBtn = document.getElementById("mute");
+const cameraBtn = document.getElementById("camera");
 
-const room = document.getElementById("room");
+let myStream;
+let muted = false;
+let cameraOff = false;
 
-
-room.hidden = true;
-
-let roomName;
-
-function addMessage(message){
-    const ul = room.querySelector("ul");
-    const li = document.createElement("li");
-    li.innerText = message;
-    ul.appendChild(li);
+async function getMedia(){
+    try{
+        myStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video:true,
+        }); //constraints{우리가 얻고 싶은 것}를 보내야함
+        //console.log(myStream) // 이 스트림을 myFace안에 얺어줘야 함
+        myFace.srcObject = myStream;
+    } catch(e){
+        console.log(e)
+    }  
 }
+// stream의 장점은 우리에게 track이라는 것을 제공해주는 것
+// 다른 track들도 가질 수 있음. 비디오가 하나의 track이 될 수 있음
+// 
 
-function haddleMessageSubmit(event){
-    event.preventDefault();
-    const input = room.querySelector("#msg input");
-    socket.emit("new_message", input.value, roomName, () => {
-        addMessage(`You: ${input.value}`);
-        input.value="";
-    });
-}
+getMedia();
 
-function haddleNicknameSubmit(event){
-    event.preventDefault();
-    const input = nameForm.querySelector("input");
-    socket.emit("nickname", input.value);
-}
-
-
-function showRoom(){
-    welcome.hidden = true;
-    room.hidden = false;
-    const h3 = room.querySelector("h3");
-    h3.innerHTML = `Room ${roomName}`;
-
-    // 메세지 보내기
-    const msgForm = room.querySelector("#msg");
-    msgForm.addEventListener("submit", haddleMessageSubmit);
-}
-
-
-function handleRoomSubmit(event){
-    event.preventDefault();
-    const input = joinRoom.querySelector("input");
+function handleMuteClick () {
+    console.log(myStream.getAudioTracks());
     
-    // 첫 번째 argument에는 evnet 이름이 들어감
-    // 두 번째 argument에는 보내고 싶은 payload
-    // 세 번째 argument에는 서버에서 호출하는 function이 들어감
-    socket.emit("enter_room", input.value, showRoom);
-    
-    roomName = input.value;
-    input.value = "";
+
+    // 음소거 여부 추적 변수 필요
+    if(!muted){
+        muteBtn.innerText = "Unmute";
+        muted = true;
+    }else {
+        muteBtn.innerText = "Mute";
+        muted = false;
+    }
+}
+function handleCameraClick () {
+    // 카메라 on off 여부 추적 변수 필요
+    if(cameraOff){
+        cameraBtn.innerText = "Turn Camera Off";
+        cameraOff = false;
+    }else {
+        cameraBtn.innerText = "Turn Camera On";
+        cameraOff= true;
+    }
 }
 
-joinRoom.addEventListener("submit", handleRoomSubmit);
-
-nameForm.addEventListener("submit", haddleNicknameSubmit);
-
-socket.on("welcome", (user, newCount) => {
-    const h3 = room.querySelector("h3");
-    h3.innerHTML = `Room ${roomName} (${newCount})`;
-    addMessage(`${user} arrived`);
-})
-
-socket.on("bye", (left, newCount) =>{
-    const h3 = room.querySelector("h3");
-    h3.innerHTML = `Room ${roomName} (${newCount})`;
-    addMessage(`${left} left ㅠㅠ`)
-})
-
-socket.on("new_message", addMessage)
-// 위 코드와 아래 코드의 결과는 같음
-// socket.on("new_message", (msg) => {
-//     addMessage(msg)
-// })
-
-//socket.on("room_change", console.log);
-// 위코드와 아래 코드의 결과는 같다.
-//socket.on("room_change", (msg)=>console.log(msg));
-
-socket.on("room_change", (rooms) => {    
-    const roomList = welcome.querySelector("ul");
-
-    // 방 목록을 항상 비워준다.
-    roomList.innerHTML = "";
-
-    rooms.forEach(room => {
-        const li = document.createElement("li");
-        li.innerText = room;      
-        
-        roomList.append(li);
-    });
-});
-
+muteBtn.addEventListener("click", handleMuteClick);
+cameraBtn.addEventListener("click", handleCameraClick);
