@@ -1,6 +1,7 @@
 import http from "http";
 import {Server} from "socket.io";
 import express from "express";
+import { instrument } from "@socket.io/admin-ui";
 
 const app = express();
 
@@ -18,20 +19,81 @@ app.get("/*", (req, res) => res.redirect("/"));
 // http서버 생성
 const httpServer = http.createServer(app);
 // socketIO 서버 생성
-const wsServer = new Server(httpServer);
+const wsServer = new Server(httpServer, {
+    // admin page 추가
+    cors: {
+        origin: ["https://admin.socket.io"],
+        credentials: true,
+    }
+});
+ // admin page 추가
+instrument(wsServer, {
+    auth: false,
+})
+
+function publicRooms(){
+    //const sids = wsServer.sockets.adapter.sids;
+    //const rooms = wsServer.sockets.adapter.rooms;
+
+    const {
+        sockets: {
+            adapter:{sids, rooms},
+        },
+    } = wsServer;
+    const publicRooms = [];
+    rooms.forEach((_, key) => {
+        if(sids.get(key) === undefined){
+            publicRooms.push(key)
+        }
+    })
+
+    return publicRooms;
+}
+
+function countRoom(roomName) {
+    return wsServer.sockets.adapter.rooms.get(roomName)?.size
+}
+
 
 wsServer.on("connection", socket => {
+    // console.log(wsServer.sockets.adapter.rooms)
+    socket["nickname"] = "Anon";
+
     socket.onAny((event) => {
         console.log(`Socket Event : ${event}`);
     })
     socket.on("enter_room", (roomName, done) => {
+       
         // 소켓 그룹을 따로 만든다 (예 : 채팅방)
         socket.join(roomName);
         done();
-        
-        socket.to(roomName).emit("welcome");
+        console.log(roomName)
+        socket.to(roomName).emit("welcome", socket.nickname, countRoom(roomName));
         // 백엔드에서 함수를 실행시키는게 아님
         // 백엔드에서 진행할 경우 보안에 문제가 생김
+
+        wsServer.sockets.emit("room_change", publicRooms());
+    });
+    
+    socket.on("disconnecting", () => {
+        socket.rooms.forEach(room => socket.to(room).emit("bye", socket.nickname,  countRoom(room) - 1));
+                                                                                // disconnecting은 완전히 나가기 전이기 때문에
+                                                                                // 포함되서 계산됨 -1 해주어야 함
+    })
+
+    socket.on("disconnect", ()=>{
+        wsServer.sockets.emit("room_change", publicRooms());
+    });
+
+
+    socket.on("new_message", (msg, room, done) => {
+        socket.to(room).emit("new_message",`${socket.nickname} : ${msg}`);
+        done();
+    })
+
+    socket.on("nickname", (nickname) => {
+        (socket["nickname"] = nickname);
+        console.log(nickname);
     });
 })
 
